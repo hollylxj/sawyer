@@ -22,13 +22,10 @@ static unsigned long long controller_counter = 0;
 // Redis keys:
 // - write:
 static std::string JOINT_TORQUES_COMMANDED_KEY = "";
-static std::string PY_JOINT_TORQUES_COMMANDED_KEY = "";
 
 // - read:
 static std::string JOINT_ANGLES_KEY  = "";
 static std::string JOINT_VELOCITIES_KEY = "";
-static std::string PY_JOINT_ANGLES_KEY  = "";
-static std::string PY_JOINT_VELOCITIES_KEY = "";
 static std::string TIMESTAMP_KEY = "";
 static std::string KP_POSITION_KEY = "";
 static std::string KV_POSITION_KEY = "";
@@ -40,11 +37,6 @@ static std::string KP_JOINT_INIT_KEY = "";
 static std::string KV_JOINT_INIT_KEY = "";
 static std::string EE_POSITION_KEY = "";
 static std::string EE_DES_POSITION_KEY = "";
-static std::string PY_EE_POSITION_KEY = "";
-static std::string PY_EE_DES_POSITION_KEY = "";
-static std::string PY_EE_DES_ORIENTATION_KEY = "";
-
-const double PI = 3.141592653589793238463;
 
 // Function to parse command line arguments
 void parseCommandline(int argc, char** argv);
@@ -54,11 +46,8 @@ int main(int argc, char** argv) {
 	// Parse command line and set redis keys
 	parseCommandline(argc, argv);
 	JOINT_TORQUES_COMMANDED_KEY = "cs225a::robot::" + robot_name + "::actuators::fgc";
-    PY_JOINT_TORQUES_COMMANDED_KEY = "py::robot::" + robot_name + "::actuators::fgc";
 	JOINT_ANGLES_KEY            = "cs225a::robot::" + robot_name + "::sensors::q";
 	JOINT_VELOCITIES_KEY        = "cs225a::robot::" + robot_name + "::sensors::dq";
-    PY_JOINT_ANGLES_KEY         = "py::robot::" + robot_name + "::sensors::q";
-    PY_JOINT_VELOCITIES_KEY     = "py::robot::" + robot_name + "::sensors::dq";
 	TIMESTAMP_KEY               = "cs225a::robot::" + robot_name + "::timestamp";
 	KP_POSITION_KEY             = "cs225a::robot::" + robot_name + "::tasks::kp_pos";
 	KV_POSITION_KEY             = "cs225a::robot::" + robot_name + "::tasks::kv_pos";
@@ -69,10 +58,7 @@ int main(int argc, char** argv) {
 	KP_JOINT_INIT_KEY           = "cs225a::robot::" + robot_name + "::tasks::kp_joint_init";
 	KV_JOINT_INIT_KEY           = "cs225a::robot::" + robot_name + "::tasks::kv_joint_init";
 	EE_POSITION_KEY             = "cs225a::robot::" + robot_name + "::tasks::ee_pos";
-    EE_DES_POSITION_KEY         = "cs225a::robot::" + robot_name + "::tasks::ee_pos_des";
-    PY_EE_POSITION_KEY          = "py::robot::" + robot_name + "::tasks::ee_pos";
-    PY_EE_DES_POSITION_KEY      = "py::robot::" + robot_name + "::tasks::ee_pos_des";
-    PY_EE_DES_ORIENTATION_KEY   = "py::robot::" + robot_name + "::tasks::ee_ori_des";
+	EE_DES_POSITION_KEY	    = "cs225a::robot::" + robot_name + "::tasks::ee_pos_des";
 
 	cout << "Loading URDF world model file: " << world_file << endl;
 
@@ -104,7 +90,6 @@ int main(int argc, char** argv) {
 	Eigen::MatrixXd J, Lambda(6,6), N(dof,dof);
 	Eigen::Matrix3d R, R_des;
 	Eigen::Vector3d x, x_des, dx, p, w, d_phi, ddx, dw;
-    Eigen::Vector3d ori_des;    // desired orientation (alpha, beta, gamma)
 	Eigen::VectorXd nullspace_damping, q_des(dof), ddx_dw(6), F(6);
 	Eigen::Vector3d x_initial;
 	x_des << 0.5, 0, 0.8;
@@ -124,19 +109,7 @@ int main(int argc, char** argv) {
 	string redis_buf;
 	double t_curr = 0;
 	robot->position(x_initial, "right_l6", Eigen::Vector3d::Zero());
-	
-    //Set desired rotation in R_des
-    //robot->rotation(R_des, "right_l6");   //Maintain current rotation
-    ori_des << 0.0, PI/3, 0.0;
-    double cad = cos(ori_des[0]);
-    double sad = sin(ori_des[0]);
-    double cbd = cos(ori_des[1]);
-    double sbd = sin(ori_des[1]);
-    double cyd = cos(ori_des[2]);
-    double syd = sin(ori_des[2]);
-    R_des << cad*cbd, cad*sbd*syd-sad*cyd, cad*sbd*cyd+sad*syd,
-             sad*cbd, sad*sbd*syd+cad*cyd, sad*sbd*cyd-cad*syd,
-             -sbd, cbd*syd, cbd*cyd;
+	robot->rotation(R_des, "right_l6");
 	while (runloop) {
 		timer.waitForNextLoop();
 
@@ -148,27 +121,9 @@ int main(int argc, char** argv) {
 		}
 
 		// read from Redis current sensor values
-        //redis_client.getEigenMatrixDerivedString(JOINT_ANGLES_KEY, robot->_q);
-        //redis_client.getEigenMatrixDerivedString(JOINT_VELOCITIES_KEY, robot->_dq);
-		redis_client.getEigenMatrixDerivedString(PY_JOINT_ANGLES_KEY, robot->_q);
-		redis_client.getEigenMatrixDerivedString(PY_JOINT_VELOCITIES_KEY, robot->_dq);
+		redis_client.getEigenMatrixDerivedString(JOINT_ANGLES_KEY, robot->_q);
+		redis_client.getEigenMatrixDerivedString(JOINT_VELOCITIES_KEY, robot->_dq);
 
-        // read from Redis desired position and orientation values
-        redis_client.getEigenMatrixDerivedString(PY_EE_DES_POSITION_KEY, x_des);
-        redis_client.getEigenMatrixDerivedString(PY_EE_DES_ORIENTATION_KEY, ori_des);
-        
-        // calculate R_des
-        cad = cos(ori_des[0]);
-        sad = sin(ori_des[0]);
-        cbd = cos(ori_des[1]);
-        sbd = sin(ori_des[1]);
-        cyd = cos(ori_des[2]);
-        syd = sin(ori_des[2]);
-        R_des << cad*cbd, cad*sbd*syd-sad*cyd, cad*sbd*cyd+sad*syd,
-        sad*cbd, sad*sbd*syd+cad*cyd, sad*sbd*cyd-cad*syd,
-        -sbd, cbd*syd, cbd*cyd;
-        //redis_client.getEigenMatrixDerivedString(PY_EE_POSITION_KEY, x);
-        
 		// Update the model
 		robot->updateModel();
 		robot->gravityVector(g);
@@ -183,13 +138,13 @@ int main(int argc, char** argv) {
 		robot->orientationError(d_phi, R_des, R);
 		robot->nullspaceMatrix(N, J);
 
-		//x_des << -0.2, 0.2 * sin(0.1*M_PI*t_curr) - 0.1, 0.2 + 0.2 * cos(0.1*M_PI*t_curr);
-		//x_des += x_initial;
+		x_des << -0.2, 0.2 * sin(0.1*M_PI*t_curr) - 0.1, 0.2 + 0.2 * cos(0.1*M_PI*t_curr);
+		x_des += x_initial;
 
 		// Send end effector position for trajectory visualization
-        redis_client.setEigenMatrixDerivedString(EE_DES_POSITION_KEY, x_des);
-        redis_client.setEigenMatrixDerivedString(EE_POSITION_KEY, x);
-
+		redis_client.setEigenMatrixDerivedString(EE_POSITION_KEY, x);
+		redis_client.setEigenMatrixDerivedString(EE_DES_POSITION_KEY, x_des);
+		
 		// Orientation and position controller with pose and damping in the nullspace
 		dw = -kp_ori * d_phi - kv_ori * w;
 
@@ -207,8 +162,7 @@ int main(int argc, char** argv) {
 		command_torques = J.transpose() * F + nullspace_damping + g; // Don't forget to add or remove gravity for real robot
 		// command_torques = robot->_M * (kp_joint * (q_des - robot->_q) - kv_joint * robot->_dq); // Joint Control Law
 
-		//redis_client.setEigenMatrixDerivedString(JOINT_TORQUES_COMMANDED_KEY, command_torques);
-        redis_client.setEigenMatrixDerivedString(PY_JOINT_TORQUES_COMMANDED_KEY, command_torques);
+		redis_client.setEigenMatrixDerivedString(JOINT_TORQUES_COMMANDED_KEY, command_torques);
 	}
 	
 	command_torques.setZero();
