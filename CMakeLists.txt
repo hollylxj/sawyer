@@ -1,7 +1,7 @@
 
 cmake_minimum_required (VERSION 3.1)
 project (CS225A)
-# SET(CMAKE_CXX_FLAGS "-I/usr/include -I/usr/local/include -Wno-ignored-attributes -Wno-deprecated-declarations")
+SET(CMAKE_CXX_FLAGS "-I/usr/include -I/usr/local/include -Wno-ignored-attributes -Wno-deprecated-declarations")
 SET(CMAKE_CXX_STANDARD 14)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -56,6 +56,17 @@ find_library(HIREDIS_LIBRARY hiredis)
 find_package(glfw3 QUIET)
 find_library(GLFW_LIBRARY glfw)
 
+# - Swig
+find_package(SWIG REQUIRED)
+include(${SWIG_USE_FILE})
+
+# - Python
+find_package(PythonLibs REQUIRED)
+#set(PYTHON_INCLUDE_DIRS /usr/local/Frameworks/Python.framework/Versions/2.7/include/python2.7)
+#/usr/local/Frameworks/Python.framework/Versions/3.6/include/python3.6m
+include_directories(${PYTHON_INCLUDE_DIRS})
+message(${PYTHON_INCLUDE_DIRS})
+
 # - jsoncpp
 if (CMAKE_SYSTEM_NAME MATCHES Darwin) 
 	find_library(JSONCPP_LIBRARY jsoncpp)
@@ -86,9 +97,9 @@ set (CS225A_BINARY_DIR ${PROJECT_SOURCE_DIR}/bin)
 
 add_subdirectory(src/visualization)
 add_subdirectory(src/simulation)
-add_subdirectory(src/hw0)
-add_subdirectory(src/hw1)
-add_subdirectory(src/hw2)
-add_subdirectory(src/hw3)
+#add_subdirectory(src/hw0)
+#add_subdirectory(src/hw1)
+#add_subdirectory(src/hw2)
+#add_subdirectory(src/hw3)
 add_subdirectory(src/sawyer)
-add_subdirectory(src/demo_project)
+#add_subdirectory(src/demo_project)
